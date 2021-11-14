@@ -5,9 +5,10 @@ import FloorFactory from "./FloorFactory";
 import LightFactory from "./LightFactory";
 import CANNON from "cannon";
 
-/**
- * CONFIGURATION
- */
+const DiceFact = new DiceFactory();
+const FloorFact = new FloorFactory();
+const LightFact = new LightFactory();
+
 const CONFIG = {
   wWidth: window.innerWidth,
   wHeight: window.innerHeight,
@@ -17,13 +18,14 @@ const CONFIG = {
   oldElapsedTime: 0,
 };
 
-const DiceFact = new DiceFactory();
-const FloorFact = new FloorFactory();
-const LightFact = new LightFactory();
+const DICES = []
 
-/**
- * Scene
- */
+const rollButton = document.querySelector('button.rollDicesButton')
+
+function getRandomNum(min, max){
+  return Math.random() * (max - min) + min
+}
+
 const Scene = new THREE.Scene();
 
 /**
@@ -40,6 +42,15 @@ const DiceFloorContactMaterial = new CANNON.ContactMaterial(
   }
 );
 GameWorld.addContactMaterial(DiceFloorContactMaterial);
+const DicesContactMaterial = new CANNON.ContactMaterial(
+  DiceFact.getDiceMaterial(),
+  DiceFact.getDiceMaterial(),
+  {
+    friction: 0,
+    restitution: 0,
+  }
+);
+GameWorld.addContactMaterial(DicesContactMaterial);
 
 /**
  * Meshes
@@ -53,7 +64,7 @@ const uniforms = {
   offset: { value: 400 },
   exponent: { value: 0.6 },
 };
-const skyGeo = new THREE.SphereGeometry(30, 32, 15);
+const skyGeo = new THREE.SphereGeometry(60, 32, 15);
 const skyMat = new THREE.ShaderMaterial({
   uniforms: uniforms,
   vertexShader: vertexShader,
@@ -70,18 +81,57 @@ Scene.add(floor);
 const floorBody = FloorFact.generateFloorMaterial();
 GameWorld.addBody(floorBody);
 
-//Dice 1
-const dice1 = DiceFact.generateDice();
-dice1.position.set(3, 4, 3);
-dice1.rotation.set(0.5, 0.5, 0.5);
-Scene.add(dice1);
+//Dices
+for(let i=0; i<6; i++){
+  
+  const setDice = {
+    x: i,
+    y: 0.5,
+    z: i,
+  }
 
-const dice1Body = DiceFact.generateDiceMaterial();
-dice1Body.applyLocalForce(
-  new CANNON.Vec3(500, -100, 0),
-  new CANNON.Vec3(0, 0, 0)
-);
-GameWorld.addBody(dice1Body);
+  const dice = DiceFact.generateDice();
+  dice.position.set(setDice.x, setDice.y, setDice.z);
+
+  const diceBody = DiceFact.generateDiceMaterial();
+  diceBody.position = new CANNON.Vec3(setDice.x, setDice.y, setDice.z),
+  GameWorld.addBody(diceBody)
+
+  DICES.push({
+    mesh: dice,
+    body: diceBody
+  })
+}
+
+
+rollButton.addEventListener('click', () => {
+  let i = 0
+
+  DICES.forEach(dice => Scene.remove(dice.mesh))
+
+  const throwDicesInterval = setInterval(() => {
+    if(i === 7){
+      return clearInterval(throwDicesInterval)
+    }
+
+    Scene.add(DICES[i].mesh)
+
+    const diceBody = DICES[i].body
+    const setDice = {
+      x: 10,
+      y: getRandomNum(1,4),
+      z: getRandomNum(-1,1),
+    }
+    diceBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,1,1),(Math.PI)/6);
+    diceBody.applyLocalForce(
+      new CANNON.Vec3(-50, 0, 0),
+      new CANNON.Vec3(0, 0, 0)
+    );
+    diceBody.position = new CANNON.Vec3(setDice.x, setDice.y, setDice.z),
+    diceBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,1,1),(Math.PI)/6);  
+    i++
+  }, 50)
+})
 
 /**
  * Lights
@@ -157,7 +207,12 @@ export function tick() {
   }
 
   GameWorld.step(1 / 60, deltaTime, 3);
-  dice1.position.copy(dice1Body.position);
+
+  DICES.forEach(object => {
+    object.mesh.position.copy(object.body.position)
+    object.mesh.quaternion.copy(object.body.quaternion)
+  })
+
   renderer.render(Scene, Camera);
   requestAnimationFrame(tick);
 }

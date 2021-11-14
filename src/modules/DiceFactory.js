@@ -39,6 +39,7 @@ export default class DiceFactory {
   }
 
   generateDiceMaterial() {
+
     const shape = new CANNON.Box(
       new CANNON.Vec3(
         CONFIG.diceFaceSize * 0.5,
@@ -47,12 +48,11 @@ export default class DiceFactory {
       )
     );
     const diceBody = new CANNON.Body({
-      mass: 1,
-      position: new CANNON.Vec3(0, 3, 0),
+      mass: 0.1,
       shape: shape,
       material: this.diceMaterial,
     });
-    return diceBody;
+        return diceBody;
   }
 
   getDiceMaterial() {
