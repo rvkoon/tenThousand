@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import Dice from "./Dice";
+import DiceFactory from "./DiceFactory";
+import FloorFactory from "./FloorFactory";
+import LightFactory from "./LightFactory";
+import CANNON from "cannon";
 
 /**
  * CONFIGURATION
@@ -10,27 +13,33 @@ const CONFIG = {
   wHeight: window.innerHeight,
   canvas: document.querySelector("canvas.webgl"),
   diceTextures: {},
+  clock: new THREE.Clock(),
+  oldElapsedTime: 0,
 };
 
-/**
- * Loader manager
- */
-const loadingManager = new THREE.LoadingManager();
-const textureLoader = new THREE.TextureLoader(loadingManager);
-for (let i = 1; i < 7; i++) {
-  CONFIG.diceTextures[`dice${i}`] = textureLoader.load(
-    `/textures/diceFaces/dice_${i}.jpeg`
-  );
-}
-
-setTimeout(() => {
-  console.log(CONFIG);
-}, 5000);
+const DiceFact = new DiceFactory();
+const FloorFact = new FloorFactory();
+const LightFact = new LightFactory();
 
 /**
  * Scene
  */
 const Scene = new THREE.Scene();
+
+/**
+ * Physics
+ */
+const GameWorld = new CANNON.World();
+GameWorld.gravity.set(0, -9.82, 0);
+const DiceFloorContactMaterial = new CANNON.ContactMaterial(
+  DiceFact.getDiceMaterial(),
+  FloorFact.getFloorMaterial(),
+  {
+    friction: 0.1,
+    restitution: 0.3,
+  }
+);
+GameWorld.addContactMaterial(DiceFloorContactMaterial);
 
 /**
  * Meshes
@@ -56,29 +65,23 @@ const sky = new THREE.Mesh(skyGeo, skyMat);
 Scene.add(sky);
 
 //Floor
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(24, 24),
-  new THREE.MeshStandardMaterial({
-    color: "#558e59",
-    roughness: 1,
-    metalness: 0,
-  })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.castShadow = true;
-floor.receiveShadow = true;
+const floor = FloorFact.generateFloor();
 Scene.add(floor);
+const floorBody = FloorFact.generateFloorMaterial();
+GameWorld.addBody(floorBody);
 
 //Dice 1
-const dice1 = new Dice({
-  color: 0xffffff,
-});
-dice1.setDicePosition({
-  posX: 4,
-  posY: 0.5,
-  posZ: 4,
-});
-Scene.add(dice1.getDice());
+const dice1 = DiceFact.generateDice();
+dice1.position.set(3, 4, 3);
+dice1.rotation.set(0.5, 0.5, 0.5);
+Scene.add(dice1);
+
+const dice1Body = DiceFact.generateDiceMaterial();
+dice1Body.applyLocalForce(
+  new CANNON.Vec3(500, -100, 0),
+  new CANNON.Vec3(0, 0, 0)
+);
+GameWorld.addBody(dice1Body);
 
 /**
  * Lights
@@ -86,44 +89,29 @@ Scene.add(dice1.getDice());
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
 Scene.add(ambientLight);
 
-const pointLight1 = new THREE.PointLight("#ffffff", 0.25);
-pointLight1.position.set(6, 6, 6);
-pointLight1.castShadow = true;
-pointLight1.shadow.camera.near = 0.5;
-pointLight1.shadow.camera.far = 100;
-pointLight1.shadow.radius = 10;
-pointLight1.shadow.mapSize.width = 1024;
-pointLight1.shadow.mapSize.height = 1024;
+const pointLight1 = LightFact.generatePointLight({
+  posX: 6,
+  posY: 6,
+  posZ: 6,
+});
 Scene.add(pointLight1);
-
-const pointLight2 = new THREE.PointLight("#ffffff", 0.25);
-pointLight2.position.set(-6, 6, -6);
-pointLight2.castShadow = true;
-pointLight2.shadow.camera.near = 0.5;
-pointLight2.shadow.camera.far = 100;
-pointLight2.shadow.radius = 10;
-pointLight2.shadow.mapSize.width = 1024;
-pointLight2.shadow.mapSize.height = 1024;
+const pointLight2 = LightFact.generatePointLight({
+  posX: -6,
+  posY: 6,
+  posZ: -6,
+});
 Scene.add(pointLight2);
-
-const pointLight3 = new THREE.PointLight("#ffffff", 0.25);
-pointLight3.position.set(-6, 6, 6);
-pointLight3.castShadow = true;
-pointLight3.shadow.camera.near = 0.5;
-pointLight3.shadow.camera.far = 100;
-pointLight3.shadow.radius = 10;
-pointLight3.shadow.mapSize.width = 1024;
-pointLight3.shadow.mapSize.height = 1024;
+const pointLight3 = LightFact.generatePointLight({
+  posX: -6,
+  posY: 6,
+  posZ: 6,
+});
 Scene.add(pointLight3);
-
-const pointLight4 = new THREE.PointLight("#ffffff", 0.25);
-pointLight4.position.set(6, 6, -6);
-pointLight4.castShadow = true;
-pointLight4.shadow.camera.near = 0.5;
-pointLight4.shadow.camera.far = 100;
-pointLight4.shadow.radius = 10;
-pointLight4.shadow.mapSize.width = 1024;
-pointLight4.shadow.mapSize.height = 1024;
+const pointLight4 = LightFact.generatePointLight({
+  posX: 6,
+  posY: 6,
+  posZ: -6,
+});
 Scene.add(pointLight4);
 
 /**
@@ -145,7 +133,7 @@ const Camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-Camera.position.set(6, 6, 6);
+Camera.position.set(20, 20, 20);
 Camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(Camera, renderer.domElement);
@@ -154,6 +142,10 @@ const controls = new OrbitControls(Camera, renderer.domElement);
  * Functions
  */
 export function tick() {
+  const elapsedTime = CONFIG.clock.getElapsedTime();
+  const deltaTime = elapsedTime - CONFIG.oldElapsedTime;
+  CONFIG.oldElapsedTime = elapsedTime;
+
   const windowSizeHasChanged =
     CONFIG.wWidth !== window.innerWidth ||
     CONFIG.wHeight !== window.innerHeight;
@@ -164,6 +156,8 @@ export function tick() {
     renderer.setSize(CONFIG.wWidth, CONFIG.wHeight);
   }
 
+  GameWorld.step(1 / 60, deltaTime, 3);
+  dice1.position.copy(dice1Body.position);
   renderer.render(Scene, Camera);
   requestAnimationFrame(tick);
 }
