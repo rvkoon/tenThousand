@@ -1,0 +1,1 @@
+export { tick } from "./Scene";
