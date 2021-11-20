@@ -1,4 +1,4 @@
 import "./style.css";
-import { tick, addDice } from "./modules/index";
+import main from "./main";
 
-tick();
+main();

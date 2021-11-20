@@ -8,7 +8,7 @@ export default class FloorFactory {
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(40, 40),
       new THREE.MeshStandardMaterial({
-        color: "#558e59",
+        color: "#7646FF",
         roughness: 1,
         metalness: 0,
       })
